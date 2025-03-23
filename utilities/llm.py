@@ -2,7 +2,7 @@ import re
 from ollama import generate
 
 MODEL_UTILITY = "llama3.1:8b"
-CONTEXT_WINDOW_UTILITY = 65536
+CONTEXT_WINDOW_UTILITY = 8192#65536
 
 
 class LLM:
@@ -33,6 +33,7 @@ class LLM:
     def clean_answer(
         self,
         prompt,
+        min_len=10,
         max_len=50,
         letters_only=False,
     ):
@@ -48,12 +49,13 @@ class LLM:
             )
             match = re.search(r"\{(.*?)\}", response.response)
             if match is not None:
-                self.context = response.context
-                if letters_only:
-                    return re.sub(r"[^\w]", "", match.group(1).lower().strip())
-                return match.group(1).strip()
-        print("ERROR:", response.response)
-        return None
+                text = match.group(1).strip()
+                if len(text) >= min_len:
+                    self.context = response.context
+                    if letters_only:
+                        return re.sub(r"[^\w]", "", text)
+                    return text
+        return response.response
 
     def summarize(self, text):
         return self.gen(
