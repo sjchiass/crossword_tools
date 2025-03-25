@@ -10,7 +10,7 @@ The `generate_clues.py` uses an LLM to make generating clues slightly easier. Ma
 
 # Overview
 
-## Data creation
+## Collecting data
 
 I've created a few scripts to help you build cross word banks:
 
@@ -22,7 +22,15 @@ I've created a few scripts to help you build cross word banks:
 
 These use a mixture of online data and built-in documentation.
 
-## Use
+## Creating summaries automatically
+
+Once data is collected, you can use LLMs to summarize each word's documentation. The summaries should be fairly reliable and only a few sentences long, making them a useful quick refresher on what each word means.
+
+## Editing data
+
+Once you've generated data, you can use the `edit_data.py` script to tweak values. Use the `--lock` flag to make it easier to lock words so that they aren't used in crosswords.
+
+# Background
 
 This is a very rough project. It makes crosswords with a modified script from here: https://github.com/sealhuang/pycrossword For rendering HTML crosswords it takes elements from here: https://www.sitepoint.com/how-built-pure-css-crossword-puzzle/
 
