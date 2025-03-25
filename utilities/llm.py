@@ -1,8 +1,8 @@
 import re
 from ollama import generate
 
-MODEL_UTILITY = "llama3.1:8b"
-CONTEXT_WINDOW_UTILITY = 8192#65536
+MODEL_UTILITY = "llama3.2:3b"#"llama3.1:8b"
+CONTEXT_WINDOW_UTILITY = 2048#8192#65536
 
 
 class LLM:
@@ -51,7 +51,7 @@ class LLM:
             if match is not None:
                 text = match.group(1).strip()
                 if len(text) >= min_len:
-                    self.context = response.context
+                    # self.context = response.context
                     if letters_only:
                         return re.sub(r"[^\w]", "", text)
                     return text
