@@ -15,6 +15,8 @@ class Word:
     category: str = None
     summary: str = None
     locked: bool = False
+    clue_en: str = None
+    clue_fr: str = None
 
     def get_fields(self):
         return fields(self)
@@ -70,8 +72,6 @@ class CrosswordClue(Word):
     y: int
     index: int
     number: str
-    clue_en: str = None
-    clue_fr: str = None
 
     def get_fields(self):
         return fields(self)
@@ -100,6 +100,9 @@ class Crossword:
             file,
             indent=4,
         )
+    
+    def get_clues(self):
+        return self.across + self.down
 
     def get_fields(self):
         return fields(self)

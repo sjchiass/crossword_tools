@@ -1,6 +1,6 @@
-# modified from: https://github.com/sealhuang/pycrossword
+# modified from: https://github.com/sealhuang/pycrossword/blob/main/crossword_puzzle.py
 import random
-from utilities.corpus import *
+from utilities import corpus as corpus_module
 import re
 import time
 import string
@@ -44,6 +44,20 @@ parser.add_argument(
     help="Whether to lock the words used right away. They won't be used to generate crosswords in the future.",
 )
 
+parser.add_argument(
+    "--min_len",
+    type=int,
+    default=1,
+    help="The minimum amount of characters a word needs before it is used.",
+)
+
+parser.add_argument(
+    "--max_len",
+    type=int,
+    default=100,
+    help="The maximum amount of characters a word can have before it is omitted.",
+)
+
 args = parser.parse_args()
 
 
@@ -73,9 +87,9 @@ class Crossword(object):
         temp_list = []
         for word in self.available_words:
             if isinstance(word, Word):
-                temp_list.append(Word(word.word))
+                temp_list.append(Word(word_obj=word.obj))
             else:
-                temp_list.append(Word(word))
+                temp_list.append(Word(word_obj=word))
         # randomize word list
         random.shuffle(temp_list)
         # sort by length
@@ -386,29 +400,30 @@ class Crossword(object):
 
         for r in range(copy.rows):
             for c in copy.grid[r]:
-                outStr += "%s " % c
+                outStr += f"{c:<2}"
             outStr += "\n"
 
         outStr = re.sub(r"[a-z]", " ", outStr)
         return outStr
 
     def json_dump(self, outfile, id):
-        data = {
-            "id": id,
-            "settings": {"rows": self.rows, "cols": self.cols},
-            "grid": [
-                [{"x": x, "y": y} for y in range(self.rows)] for x in range(self.cols)
-            ],
-            "words": {"across": [], "down": []},
-        }
+        parent_id = id
+        rows = self.rows
+        cols = self.cols
+        grid = [
+            [corpus_module.CrosswordCell(x=x, y=y) for y in range(self.rows)]
+            for x in range(self.cols)
+        ]
+        across = []
+        down = []
 
         for y in range(self.rows):
             for x, c in enumerate(self.grid[y]):
-                data["grid"][x][y]["final_answer"] = False
+                grid[x][y].final_answer = False
                 if c != "-":
-                    data["grid"][x][y]["letter"] = c
+                    grid[x][y].letter = c
                 else:
-                    data["grid"][x][y]["letter"] = None
+                    grid[x][y].letter = None
 
         # Get numbers
         copy = deepcopy(self)
@@ -417,37 +432,45 @@ class Crossword(object):
         for y, r in enumerate(range(copy.rows)):
             for x, c in enumerate(copy.grid[r]):
                 if isinstance(c, int):
-                    data["grid"][x][y]["number"] = str(c)
+                    grid[x][y].number = str(c)
                 else:
-                    data["grid"][x][y]["number"] = None
+                    grid[x][y].number = None
 
         # Get words
         for index, word in enumerate(
             sorted(self.current_word_list, key=lambda x: x.down_across())
         ):
             if word.down_across() == "across":
-                data["words"]["across"].append(
-                    {
-                        "index": index,
-                        "word": word.word,
-                        "number": word.number,
-                        "col": word.col,
-                        "row": word.row,
-                    }
+                across.append(
+                    corpus_module.CrosswordClue(
+                        x=word.col,
+                        y=word.row,
+                        index=index,
+                        number=word.number,
+                        **word.obj.__dict__,
+                    )
                 )
             elif word.down_across() == "down":
-                data["words"]["down"].append(
-                    {
-                        "index": index,
-                        "word": word.word,
-                        "number": word.number,
-                        "col": word.col,
-                        "row": word.row,
-                    }
+                down.append(
+                    corpus_module.CrosswordClue(
+                        x=word.col,
+                        y=word.row,
+                        index=index,
+                        number=word.number,
+                        **word.obj.__dict__,
+                    )
                 )
 
-        with open(outfile, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        crossword_obj = corpus_module.Crossword(
+            parent_id=parent_id,
+            cols=cols,
+            rows=rows,
+            grid=grid,
+            across=across,
+            down=down,
+        )
+
+        crossword_obj.to_json(open(outfile, "w", encoding="utf-8"))
 
     def word_bank(self):
         outStr = ""
@@ -467,14 +490,15 @@ class Crossword(object):
                 word.col,
                 word.row,
                 word.down_across(),
-                word.word
+                word.word,
             )
         return outStr
 
 
 class Word(object):
-    def __init__(self, word=None):
-        self.word = re.sub(r"\s", "", word.lower())
+    def __init__(self, word_obj=None):
+        self.word = re.sub("[^\w\-_]", "", word_obj.word.upper())
+        self.obj = word_obj
         self.length = len(self.word)
         # the below are set when placed on board
         self.row = None
@@ -493,16 +517,21 @@ class Word(object):
         return self.word
 
 
-corpus = corpus_from_json(open(args.input, "r"))
+corpus = corpus_module.corpus_from_json(open(args.input, "r"))
 
-H = 12 + 1
-W = 18 + 1
 TIME_LIMIT = 5
 
-word_list = [word.word for word in corpus.vocabulary if word.locked is False]
+# The algorithm doesn't accept duplicate words
+word_list = {
+    word.word: word
+    for word in corpus.vocabulary
+    if word.locked is False
+    and len(word.word) >= args.min_len
+    and len(word.word) <= args.max_len
+}
+word_list = word_list.values()
 
-
-a = Crossword(args.height, args.width, "-", 1000000, word_list)
+a = Crossword(args.width, args.height, "-", 1000000, word_list)
 a.compute_crossword(TIME_LIMIT)
 print(a.word_bank())
 print(a.solution())

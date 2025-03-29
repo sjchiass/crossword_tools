@@ -1,12 +1,17 @@
 # Setup
 
-`conda create -n crossword -c conda-forge python=3.11 python-slugify levenshtein pillow jinja2 bs4 requests tqdm`
+`conda create -n crossword -c conda-forge python=3.11 python-slugify levenshtein pillow jinja2 bs4 requests tqdm python-dotenv`
 
 `conda activate crossword`
 
-The `generate_clues.py` uses an LLM to make generating clues slightly easier. Make sure to review the outputs very carefully! There is nothing worse than a crosswords with errors. (Clue: domesticated animal, likes boxes Solution: coffee table)
+
+For ollama:
 
 `pip install ollama`
+
+For OpenAI:
+
+`pip install openai`
 
 # Overview
 
@@ -22,9 +27,13 @@ I've created a few scripts to help you build cross word banks:
 
 These use a mixture of online data and built-in documentation.
 
-## Creating summaries automatically
+## Creating summaries and clues automatically
 
 Once data is collected, you can use LLMs to summarize each word's documentation. The summaries should be fairly reliable and only a few sentences long, making them a useful quick refresher on what each word means.
+
+Generating crossword requires a decent amount of words and some trial and error. Clues are of higher quality when the LLM has a chance to read documentation first. You also can't use the mini models because their outputs are usually incoherent. With all that said, generating a crossword with clues using `gpt-4o` should cost at least 25 cents. Please let me know of your experiences.
+
+If you have a GPU, generating clues with Ollama is free. Without a GPU it is pretty slow.
 
 ## Editing data
 
