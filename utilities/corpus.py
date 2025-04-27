@@ -39,7 +39,7 @@ class Corpus:
             word.word = re.sub("[^\w\-_]", "", word.word.upper())
 
     def to_json(self, file: io.TextIOWrapper):
-        self.validate()
+        # self.validate()
         json.dump(
             {
                 "filetype": "Corpus",

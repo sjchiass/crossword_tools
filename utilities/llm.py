@@ -10,7 +10,7 @@ if os.environ.get("OPENAI_API_KEY") is None:
     class LLM:
         def __init__(
             self,
-            system="You are a helpful AI assistant.",
+            system="You are a helpful AI assistant. You only provide direct answers to questions.",
             model=os.environ.get("MODEL_UTILITY"),
             context_window_size=int(os.environ.get("CONTEXT_WINDOW_UTILITY")),
         ):
@@ -18,12 +18,22 @@ if os.environ.get("OPENAI_API_KEY") is None:
             self.context = None
             self.model = model
             self.context_window_size = context_window_size
+            # Reasoning models can be detected by their responses that start with <think>
+            self.reasoning = False
+            # But it's quicker to hardcode them in, rather than test at runtime
+            if "qwq" in self.model or "deepseek-r" in self.model:
+                self.reasoning = True
 
         # There seems to be a limit of input that Ollama can take
         # The Ollama server will crash if it gets too much
-        def gen(self, prompt, context=None, limit=5000, max_len=150):
+        def gen(self, prompt, context=None, limit=None, max_len=150):
             if context is None:
                 context = self.context
+            if limit is None:
+                limit = self.context_window_size * 2
+            # Remove limit from reasoning models
+            if self.reasoning:
+                max_len = None
             response = generate(
                 model=self.model,
                 system=self.system,
@@ -35,51 +45,57 @@ if os.environ.get("OPENAI_API_KEY") is None:
                 },
             )
             self.context = response.context
-            return response.response
-
-        def clean_answer(
-            self,
-            prompt,
-            min_len=10,
-            max_len=50,
-            letters_only=False,
-        ):
-            for _ in range(5):
-                if prompt == "":
-                    return ""
-                response = generate(
-                    model=self.model,
-                    system="You are a helpful AI assistant and you put your answers in curly brackets {}. Keep your answers as short as possible.",
-                    prompt=prompt,
-                    options={
-                        "num_ctx": self.context_window_size,
-                        "num_predict": 2 + max_len,
-                    },
-                    context=self.context,
-                )
-                match = re.search(r"\{(.*?)\}", response.response)
-                if match is not None:
-                    text = match.group(1).strip()
-                    if len(text) >= min_len:
-                        # self.context = response.context
-                        if letters_only:
-                            return re.sub(r"[^\w]", "", text)
-                        return text
-            return response.response
-
-        def summarize(self, text):
-            return self.gen(
-                "Please summarize the following text into a single paragraph:\n\n"
-                + text
-                + "\n\nPlease summarize the previous text into a single paragraph."
+            response = re.sub(
+                r"<think>.*?</think>\n?", "", response.response, flags=re.DOTALL
             )
+            return response
 
-        def give_clue(self, answer, pre_prompt=""):
+        def summarize(self, text, word):
+            # Output as long as there are no newlines
+            for _ in range(5):
+                output = self.gen(
+                    f"Please summarize the following text about {word} into a single paragraph, making sure to focus on {word}:\n\n"
+                    + text
+                    + f"\n\nPlease summarize the previous text about {word} into a single paragraph."
+                )
+                if "\n" not in output:
+                    return output
+                else:
+                    self.gen(
+                        "Your previous answer was not a single paragraph. Only return a single paragraph as the answer when I ask for a summary."
+                    )
+            return output
+
+        @staticmethod
+        def clue_cleanup(clue):
+            output = (
+                re.sub("\([^A-Za-z]+\)", " ", clue)
+                .replace("\n", " ")
+                .replace("  ", " ")
+                .strip()
+            )
+            # Sometimes LLMs put the answer in quotes
+            if output[0] == '"' and output[-1] == '"':
+                output = output[1:-1]
+            return output
+
+        def give_clue(self, answer, category, pre_prompt=""):
             if pre_prompt is not None:
                 self.gen(pre_prompt)
-            return self.clean_answer(
-                f"Please provide me a very short crossword clue where the answer is {answer}. Make sure that the answer does not appear in the clue."
-            ).strip("\"'")
+            for _ in range(5):
+                output = self.clue_cleanup(
+                    self.gen(
+                        f"Please provide me a very short crossword clue where the answer is {answer} ({category}). Please respond only with a single sentence, the clue, and make sure not to include the answer in your response.",
+                        max_len=30,
+                    )
+                )
+                if answer.lower() not in output.lower():
+                    return output
+                else:
+                    self.gen(
+                        "You put the answer of the crossword clue in your previous answer. When answering me, please make sure not to include their answers in them. Answer with a single sentence, the clue."
+                    )
+            return output
 
 else:
     from openai import OpenAI

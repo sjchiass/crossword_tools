@@ -86,5 +86,6 @@ for n, word in enumerate(words):
             else:
                 break
         word.clue_en = clue
+        word.clue_fr = llm.gen(f"Translate the following into French:\n\n{clue}")
     # save
     data.to_json(open(args.input, "w"))

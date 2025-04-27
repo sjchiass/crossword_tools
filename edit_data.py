@@ -1,6 +1,8 @@
 from utilities.corpus import *
 import argparse
 from string import ascii_uppercase
+import os
+from math import ceil
 
 # Fields that cannot be edited
 READ_ONLY = ["id", "word", "doc", "x", "y", "index", "number"]
@@ -20,6 +22,12 @@ parser.add_argument(
     "--lock",
     action="store_true",
     help="Enter a mode of toggling locked status on/off. Makes it much easier and quicker to remove unwanted words.",
+)
+
+parser.add_argument(
+    "--hide",
+    action="store_true",
+    help="Do not display any locked items.",
 )
 
 args = parser.parse_args()
@@ -74,47 +82,65 @@ while True:
     datafile, datatype = infer_from_json(open(args.input, "r"))
 
     # Generate a multiple choices prompt
+    to_print = []
     if datatype == "Corpus":
         dataset = datafile.vocabulary
         for n, word in enumerate(dataset):
             status = ""
             if word.locked:
+                if args.hide:
+                    continue
                 status = "LOCKED"
-            print(f"{n:<3}) {word.word} [{word.category}] {status}")
+            to_print.append(f"{n:<3}) {word.word} [{word.category}] {status}")
     elif datatype == "Crossword":
         # Normally this would work fine since lists hold references;
         # however, it looks like my use of functions breaks the references...
         # I'll have to test further.
         dataset = datafile.down + datafile.across
-        print("DOWN")
+        to_print.append("DOWN")
         for n, word in enumerate(dataset):
             if n == len(datafile.down):
-                print("ACROSS")
+                to_print.append("ACROSS")
             status = ""
             if word.locked:
+                if args.hide:
+                    continue
                 status = "LOCKED"
-            print(f"{n:<3}) {word.word} [{word.category}] {status}")
+            to_print.append(f"{n:<3}) {word.word} [{word.category}] {status}")
+    # Print out the choices in columns on the console, to make more compact
+    width, height = os.get_terminal_size()
+    max_len = max([len(x) for x in to_print]) + 1  # For padding
+    max_cols = max(1, width // max_len)
+    max_rows = ceil(len(to_print) / max_cols)
+    print(width, height, max_len, max_cols, max_rows)
+    # Print out in columns
+    for n, row in enumerate(range(max_rows)):
+        for m, col in enumerate(range(max_cols)):
+            if n + m * max_rows < len(to_print):
+                print(f"{to_print[n + m * max_rows]:<{max_len}}", end="")
+        print()
     word_choice = input(
         "Please enter the number of the word you would like to edit, or enter Q to quit > "
     )
     if word_choice.lower() == "q":
         quit()
-    
-    # Once a word is chosen, launch the editing interface
-    word_choice = int(word_choice.strip())
-    if word_choice in set(range(len(dataset))):
-        datapoint = dataset[word_choice]
-        # If in lock/unlock mode, skip and simply toggle lock status
-        if args.lock:
-            datapoint = lock_datapoint(datapoint)
-        else:
-            datapoint = edit_datapoint(datapoint)
 
-    # Propagate changes backwards to the original file
-    dataset[word_choice] = datapoint
-    if datatype == "Corpus":
-        datafile.vocabulary = dataset
-    else:
-        datafile.down = dataset[:len(datafile.down)]
-        datafile.across = dataset[len(datafile.down):]
-    datafile.to_json(open(args.input, "w"))
+    # Once a word is chosen, launch the editing interface
+    word_choices = [int(x) for x in word_choice.strip().split() if x.isdigit()]
+    for word_choice in word_choices:
+        if word_choice in set(range(len(dataset))):
+            datapoint = dataset[word_choice]
+            # If in lock/unlock mode, skip and simply toggle lock status
+            if args.lock:
+                datapoint = lock_datapoint(datapoint)
+            else:
+                datapoint = edit_datapoint(datapoint)
+
+        # Propagate changes backwards to the original file
+        dataset[word_choice] = datapoint
+        if datatype == "Corpus":
+            datafile.vocabulary = dataset
+        else:
+            datafile.down = dataset[: len(datafile.down)]
+            datafile.across = dataset[len(datafile.down) :]
+        datafile.to_json(open(args.input, "w"))
